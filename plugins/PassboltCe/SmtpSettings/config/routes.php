@@ -55,4 +55,9 @@ $routes->plugin('Passbolt/SmtpSettings', ['path' => '/smtp'], function (RouteBui
     $routes->connect('/client-credentials/send-test-email', ['controller' => 'SmtpClientCredentials', 'action' => 'sendTestEmail'])
         ->setMethods(['GET'])
         ->setMiddleware([SmtpSettingsSecurityMiddleware::class]);
+
+    // graph
+    $routes->connect('/graph/send-test-email', ['controller' => 'SmtpGraph', 'action' => 'sendTestEmail'])
+        ->setMethods(['GET'])
+        ->setMiddleware([SmtpSettingsSecurityMiddleware::class]);
 });
