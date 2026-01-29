@@ -26,18 +26,19 @@ use Cake\Routing\Router;
 
 class SmtpClientCredentialsController extends AppController
 {
-    public function authorize()
-    {
-        $tenantId = Configure::read('E365.client_credentials.tenant_id');
-        $clientId = Configure::read('E365.client_credentials.client_id');
-        $url = "https://login.microsoftonline.com/$tenantId/adminconsent";
-        $params = [
-            'client_id' => $clientId,
-            'redirect_uri' => Router::url('smtp/client-credentials/callback', full: true),
-        ];
-
-        return $this->redirect($url . '?' . http_build_query($params));
-    }
+// NOT needed for single tenant
+//    public function authorize()
+//    {
+//        $tenantId = Configure::read('E365.client_credentials.tenant_id');
+//        $clientId = Configure::read('E365.client_credentials.client_id');
+//        $url = "https://login.microsoftonline.com/$tenantId/adminconsent";
+//        $params = [
+//            'client_id' => $clientId,
+//            'redirect_uri' => Router::url('smtp/client-credentials/callback', full: true),
+//        ];
+//
+//        return $this->redirect($url . '?' . http_build_query($params));
+//    }
 
     public function callback()
     {
@@ -59,7 +60,8 @@ class SmtpClientCredentialsController extends AppController
     {
         $tokenResponse = Cache::read('client_credentials_token_response', 'test365');
         if (!$tokenResponse) {
-            return $this->redirect(['action' => 'authorize']);
+            $this->requestAccessToken();
+            $tokenResponse = Cache::read('client_credentials_token_response', 'test365');
         }
 
         $accessToken = $tokenResponse['response']['access_token'] ?? null;
