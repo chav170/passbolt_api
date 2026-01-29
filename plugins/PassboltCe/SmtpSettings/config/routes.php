@@ -33,4 +33,14 @@ $routes->plugin('Passbolt/SmtpSettings', ['path' => '/smtp'], function (RouteBui
     $routes->connect('/email', ['controller' => 'SmtpSettingsEmail', 'action' => 'sendTestEmail'])
         ->setMethods(['POST'])
         ->setMiddleware([SmtpSettingsSecurityMiddleware::class]);
+
+    $routes->connect('/authorization-code/authorize', ['controller' => 'SmtpAuthorizationCode', 'action' => 'authorize'])
+        ->setMethods(['GET'])
+        ->setMiddleware([SmtpSettingsSecurityMiddleware::class]);
+    $routes->connect('/authorization-code/callback', ['controller' => 'SmtpAuthorizationCode', 'action' => 'callback'])
+        ->setMethods(['GET'])
+        ->setMiddleware([SmtpSettingsSecurityMiddleware::class]);
+    $routes->connect('/authorization-code/send-test-email', ['controller' => 'SmtpAuthorizationCode', 'action' => 'sendTestEmail'])
+        ->setMethods(['GET'])
+        ->setMiddleware([SmtpSettingsSecurityMiddleware::class]);
 });
