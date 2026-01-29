@@ -24,19 +24,16 @@ use Cake\Mailer\Mailer;
 use Cake\Mailer\Transport\SmtpTransport;
 use Cake\Routing\Router;
 
-class SmtpAuthorizationCodeController extends AppController
+class SmtpClientCredentialsController extends AppController
 {
     public function authorize()
     {
-        $tenantId = Configure::read('E365.auth_code.tenant_id');
-        $clientId = Configure::read('E365.auth_code.client_id');
-        $url = "https://login.microsoftonline.com/$tenantId/oauth2/v2.0/authorize";
+        $tenantId = Configure::read('E365.client_credentials.tenant_id');
+        $clientId = Configure::read('E365.client_credentials.client_id');
+        $url = "https://login.microsoftonline.com/$tenantId/adminconsent";
         $params = [
             'client_id' => $clientId,
-            'response_type' => 'code',
-            'response_mode' => 'query',
-            'redirect_uri' => Router::url('smtp/authorization-code/callback', full: true),
-            'scope' => 'https://outlook.office.com/SMTP.Send offline_access',
+            'redirect_uri' => Router::url('smtp/client-credentials/callback', full: true),
         ];
 
         return $this->redirect($url . '?' . http_build_query($params));
@@ -44,41 +41,15 @@ class SmtpAuthorizationCodeController extends AppController
 
     public function callback()
     {
-        $code = $this->getRequest()->getQuery('code');
-        if (!$code) {
-            throw new \Exception('Missing `code` in query params');
+        $adminConsent = $this->getRequest()->getQuery('admin_consent');
+        if (!$adminConsent) {
+            throw new \Exception('Missing `admin_consent` in query params');
+        }
+        if ($adminConsent !== 'True') {
+            throw new \Exception('Consent denied');
         }
 
-        $tenantId = Configure::read('E365.auth_code.tenant_id');
-        $clientId = Configure::read('E365.auth_code.client_id');
-        $clientSecret = Configure::read('E365.auth_code.client_secret');
-
-        $http = new Client();
-        $response = $http->post(
-            "https://login.microsoftonline.com/$tenantId/oauth2/v2.0/token",
-            [
-                'client_id' => $clientId,
-                'client_secret' => $clientSecret,
-                'scope' => 'https://outlook.office.com/SMTP.Send offline_access',
-                'grant_type' => 'authorization_code',
-                'code' => $code,
-                'redirect_uri' => Router::url('smtp/authorization-code/callback', full: true),
-            ]
-        );
-
-        if (!$response->isOk()) {
-            throw new \RuntimeException('Failed to get token: ' . $response->getStringBody());
-        }
-
-        $data = $response->getJson();
-        Cache::write(
-            'auth_code_token_response',
-            [
-                'response' => $data,
-                'timestamp' => time(),
-            ],
-            'test365'
-        );
+        $this->requestAccessToken();
 
         return $this->redirect(['action' => 'sendTestEmail']);
     }
@@ -86,7 +57,7 @@ class SmtpAuthorizationCodeController extends AppController
 
     public function sendTestEmail()
     {
-        $tokenResponse = Cache::read('auth_code_token_response', '_cake_model_');
+        $tokenResponse = Cache::read('client_credentials_token_response', 'test365');
         if (!$tokenResponse) {
             return $this->redirect(['action' => 'authorize']);
         }
@@ -98,8 +69,12 @@ class SmtpAuthorizationCodeController extends AppController
 
         $expirationTime = $tokenResponse['timestamp'] + $tokenResponse['response']['expires_in'];
         if (time() > $expirationTime) {
-            // @todo: this should implement refresh token call instead
-            return $this->redirect(['action' => 'authorize']);
+            $this->requestAccessToken();
+            $tokenResponse = Cache::read('client_credentials_token_response', 'test365');
+            $accessToken = $tokenResponse['response']['access_token'] ?? null;
+            if (!$accessToken) {
+                throw new \Exception('Invalid response data');
+            }
         }
 
         $username = Configure::read('E365.transport.username');
@@ -122,13 +97,45 @@ class SmtpAuthorizationCodeController extends AppController
             $result = $mailer
                 ->setFrom([$username => $username])
                 ->setTo($sendTo)
-                ->setSubject(__('SMTP Oauth2 authorization code flow'))
-                ->deliver('Test email with authorization code flow');
+                ->setSubject(__('SMTP Oauth2 client credentials flow'))
+                ->deliver('Test email with client credentials flow');
             debug($result);
             exit;
         } catch (\Exception $e) {
             debug($e);
             exit;
         }
+    }
+
+    protected function requestAccessToken(): void
+    {
+        $tenantId = Configure::read('E365.client_credentials.tenant_id');
+        $clientId = Configure::read('E365.client_credentials.client_id');
+        $clientSecret = Configure::read('E365.client_credentials.client_secret');
+
+        $http = new Client();
+        $response = $http->post(
+            "https://login.microsoftonline.com/$tenantId/oauth2/v2.0/token",
+            [
+                'client_id' => $clientId,
+                'client_secret' => $clientSecret,
+                'scope' => 'https://outlook.office365.com/.default',
+                'grant_type' => 'client_credentials',
+            ]
+        );
+
+        if (!$response->isOk()) {
+            throw new \RuntimeException('Failed to get token: ' . $response->getStringBody());
+        }
+
+        $data = $response->getJson();
+        Cache::write(
+            'client_credentials_token_response',
+            [
+                'response' => $data,
+                'timestamp' => time(),
+            ],
+            'test365'
+        );
     }
 }
